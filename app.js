@@ -33,7 +33,7 @@ const SOURCES = {
 // API Endpoints
 app.get('/api/manga', async (req, res) => {
   try {
-    const { name, source = SOURCES.MANGAFOX, chapters, format = 'json' } = req.query;
+    const { name, source = 'mangafox', chapters, format = 'json' } = req.query;
 
     if (!name) {
       return res.status(400).json({ error: 'Name parameter is required' });
@@ -43,35 +43,35 @@ app.get('/api/manga', async (req, res) => {
     const chapterList = parseChapterRange(chapters);
 
     switch (source.toLowerCase()) {
-      case SOURCES.MANGAFOX:
+      case 'mangafox':
         searchResult = await searchMangaMangafox(name, 1);
         mangaDetails = await fetchMangaDetailsMangafox(searchResult[0].url.split('/').pop());
         chapterImages = await Promise.all(chapterList.map(chapter => 
           downloadChapterMangafox(searchResult[0].url.split('/').pop(), chapter)
         ));
         break;
-      case SOURCES.READMANHWA:
+      case 'readmanhwa':
         searchResult = await searchMangaReadmanhwa(name, 1);
         mangaDetails = await fetchMangaDetailsReadmanhwa(searchResult[0].slug);
         chapterImages = await Promise.all(chapterList.map(chapter => 
           downloadChapterReadmanhwa(searchResult[0].slug, chapter)
         ));
         break;
-      case SOURCES.MANGANELO:
+      case 'manganelo':
         searchResult = await searchMangaManganelo(name, 1);
         mangaDetails = await fetchMangaDetailsManganelo(searchResult[0].url);
         chapterImages = await Promise.all(chapterList.map(chapter => 
           downloadChapterManganelo(`${searchResult[0].url}/chapter-${chapter}`)
         ));
         break;
-      case SOURCES.MANGA4LIFE:
+      case 'manga4life':
         searchResult = await searchMangaManga4life(name, 1);
         mangaDetails = await fetchMangaDetailsManga4life(searchResult[0].slug);
         chapterImages = await Promise.all(chapterList.map(chapter => 
           downloadChapterManga4life(searchResult[0].slug, chapter)
         ));
         break;
-      case SOURCES.GMANGA:
+      case 'gmanga':
         searchResult = await searchMangaGmanga(name, 1);
         mangaDetails = await fetchMangaDetailsGmanga(searchResult[0].slug);
         chapterImages = await Promise.all(chapterList.map(chapter => 
