@@ -1,12 +1,10 @@
 const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
-const { urlEncode, fetchHTML, downloadImages, parseChapterRange } = require('./utils/scraper-utils');
-const { searchMangaReadmanhwa, fetchMangaDetailsReadmanhwa, downloadChapterReadmanhwa } = require('./utils/readmanhwa');
-const { searchMangaGmanga, fetchMangaDetailsGmanga, downloadChapterGmanga } = require('./utils/gmanga');
-const { searchMangaManganelo, fetchMangaDetailsManganelo, downloadChapterManganelo } = require('./utils/manganelo');
-const { searchMangaManga4life, fetchMangaDetailsManga4life, downloadChapterManga4life } = require('./utils/manga4life');
-const { searchMangaMangafox, fetchMangaDetailsMangafox, downloadChapterMangafox } = require('./utils/mangafox');
+const axios = require('axios');
+const cheerio = require('cheerio');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -21,77 +19,130 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// Manga sources
-const SOURCES = {
-  MANGAFOX: 'mangafox',
-  READMANHWA: 'readmanhwa',
-  MANGANELO: 'manganelo',
-  MANGA4LIFE: 'manga4life',
-  GMANGA: 'gmanga'
-};
+// Static files for serving downloaded images
+const staticDir = path.join(__dirname, 'public/static');
+if (!fs.existsSync(staticDir)) {
+  fs.mkdirSync(staticDir, { recursive: true });
+}
+app.use('/static', express.static(staticDir));
+
+// Utility: Parse chapter range
+function parseChapterRange(chapters) {
+  if (!chapters) return [];
+  return chapters.split(',').flatMap((range) => {
+    const [start, end] = range.split('-').map(Number);
+    if (end) {
+      return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+    }
+    return [start];
+  });
+}
+
+// Scraping logic for Manganelo
+async function searchMangaManganelo(input, numOfSearch) {
+  const url = `https://mangakakalot.com/search/story/${encodeURIComponent(input.replace(/ /g, '_'))}`;
+  const { data } = await axios.get(url);
+  const $ = cheerio.load(data);
+
+  const results = [];
+  $('.story_item').each((i, el) => {
+    if (i >= numOfSearch) return false;
+    const $el = $(el);
+    results.push({
+      name: $el.find('.story_name a').text().trim(),
+      url: $el.find('.story_name a').attr('href'),
+      latest: $el.find('.story_chapter a').attr('title'),
+      updated: $el.find('.story_item_right').text().match(/Updated : (.*)/)[1]
+    });
+  });
+
+  if (results.length === 0) {
+    throw new Error('No manga found');
+  }
+
+  return results;
+}
+
+async function downloadChapterManganelo(url) {
+  const { data } = await axios.get(url);
+  const $ = cheerio.load(data);
+
+  const images = [];
+  $('.container-chapter-reader img').each((_, el) => {
+    images.push($(el).attr('src'));
+  });
+
+  return images;
+}
 
 // API Endpoints
 app.get('/api/manga', async (req, res) => {
   try {
-    const { name, source = 'manganelo', chapters, format = 'json' } = req.query;
+    const { name, chapters, format = 'json' } = req.query;
 
     if (!name) {
       return res.status(400).json({ error: 'Name parameter is required' });
     }
 
-    let searchResult, mangaDetails, chapterImages;
     const chapterList = parseChapterRange(chapters);
 
-    switch (source.toLowerCase()) {
-      case 'mangafox':
-        searchResult = await searchMangaMangafox(name, 1);
-        mangaDetails = await fetchMangaDetailsMangafox(searchResult[0].url.split('/').pop());
-        chapterImages = await Promise.all(chapterList.map(chapter => 
-          downloadChapterMangafox(searchResult[0].url.split('/').pop(), chapter)
-        ));
-        break;
-      case 'readmanhwa':
-        searchResult = await searchMangaReadmanhwa(name, 1);
-        mangaDetails = await fetchMangaDetailsReadmanhwa(searchResult[0].slug);
-        chapterImages = await Promise.all(chapterList.map(chapter => 
-          downloadChapterReadmanhwa(searchResult[0].slug, chapter)
-        ));
-        break;
-      case 'manganelo':
-        searchResult = await searchMangaManganelo(name, 1);
-        mangaDetails = await fetchMangaDetailsManganelo(searchResult[0].url);
-        chapterImages = await Promise.all(chapterList.map(chapter => 
-          downloadChapterManganelo(`${searchResult[0].url}/chapter-${chapter}`)
-        ));
-        break;
-      case 'manga4life':
-        searchResult = await searchMangaManga4life(name, 1);
-        mangaDetails = await fetchMangaDetailsManga4life(searchResult[0].slug);
-        chapterImages = await Promise.all(chapterList.map(chapter => 
-          downloadChapterManga4life(searchResult[0].slug, chapter)
-        ));
-        break;
-      case 'gmanga':
-        searchResult = await searchMangaGmanga(name, 1);
-        mangaDetails = await fetchMangaDetailsGmanga(searchResult[0].slug);
-        chapterImages = await Promise.all(chapterList.map(chapter => 
-          downloadChapterGmanga(searchResult[0].slug, chapter)
-        ));
-        break;
-      default:
-        return res.status(400).json({ error: 'Invalid source' });
+    // Search and download images
+    const searchResult = await searchMangaManganelo(name, 1);
+    if (!searchResult || searchResult.length === 0) {
+      return res.status(404).json({ error: 'Manga not found' });
     }
 
+    const title = searchResult[0].name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const chapterImages = await Promise.all(
+      chapterList.map(async (chapter) => {
+        const chapterUrl = `${searchResult[0].url}/chapter-${chapter}`;
+        const images = await downloadChapterManganelo(chapterUrl);
+
+        // Save images locally
+        const chapterDir = path.join(staticDir, title, `chapter_${chapter}`);
+        if (!fs.existsSync(chapterDir)) {
+          fs.mkdirSync(chapterDir, { recursive: true });
+        }
+
+        const localImages = [];
+        await Promise.all(
+          images.map(async (imgUrl, index) => {
+            const filename = `${title}_${chapter}_${index + 1}.jpg`;
+            const filePath = path.join(chapterDir, filename);
+
+            const response = await axios({
+              url: imgUrl,
+              method: 'GET',
+              responseType: 'stream'
+            });
+
+            await new Promise((resolve, reject) => {
+              const writer = fs.createWriteStream(filePath);
+              response.data.pipe(writer);
+              writer.on('finish', resolve);
+              writer.on('error', reject);
+            });
+
+            localImages.push(`/static/${title}/chapter_${chapter}/${filename}`);
+          })
+        );
+
+        return localImages;
+      })
+    );
+
+    // Build response
     const data = {
       title: searchResult[0].name,
-      source: source,
-      status: searchResult[0].status,
+      source: 'manganelo',
+      status: searchResult[0].latest || 'Unknown',
       chapters: chapterList.map((chapter, index) => ({
-        chapter: chapter,
+        chapter,
         images: chapterImages[index]
       }))
     };
 
+    // Format output (JSON or XML)
     if (format === 'xml') {
       res.set('Content-Type', 'application/xml');
       let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<manga>\n';
@@ -99,9 +150,9 @@ app.get('/api/manga', async (req, res) => {
       xml += `  <source>${data.source}</source>\n`;
       xml += `  <status>${data.status}</status>\n`;
       xml += '  <chapters>\n';
-      data.chapters.forEach(chapter => {
+      data.chapters.forEach((chapter) => {
         xml += `    <chapter number="${chapter.chapter}">\n`;
-        chapter.images.forEach(image => {
+        chapter.images.forEach((image) => {
           xml += `      <image>${image}</image>\n`;
         });
         xml += '    </chapter>\n';
@@ -112,31 +163,7 @@ app.get('/api/manga', async (req, res) => {
 
     res.json(data);
   } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Download endpoint
-app.get('/api/download', async (req, res) => {
-  try {
-    const { url, referer } = req.query;
-
-    if (!url) {
-      return res.status(400).json({ error: 'URL parameter is required' });
-    }
-
-    const images = await downloadImages([url], referer);
-    
-    if (images.length === 0) {
-      return res.status(404).json({ error: 'Image not found' });
-    }
-
-    const image = images[0];
-    res.set('Content-Type', image.contentType);
-    res.send(image.data);
-  } catch (error) {
-    console.error('Error:', error);
+    console.error('Error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
