@@ -33,7 +33,7 @@ const SOURCES = {
 // API Endpoints
 app.get('/api/manga', async (req, res) => {
   try {
-    const { name, source = 'mangafox', chapters, format = 'json' } = req.query;
+    const { name, source = 'manganelo', chapters, format = 'json' } = req.query;
 
     if (!name) {
       return res.status(400).json({ error: 'Name parameter is required' });
