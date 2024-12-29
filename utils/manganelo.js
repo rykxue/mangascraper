@@ -2,7 +2,7 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 
 async function searchMangaManganelo(input, numOfSearch) {
-  const url = `https://mangakakalot.com/search/story/${encodeURIComponent(input.replace(/ /g, '_'))}`;
+  const url = `https://m.manganelo.com/search/story/${encodeURIComponent(input.replace(/ /g, '_'))}`;
   const { data } = await axios.get(url);
   const $ = cheerio.load(data);
 
