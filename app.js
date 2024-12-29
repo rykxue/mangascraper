@@ -5,7 +5,7 @@ const cheerio = require('cheerio');
 const express = require('express');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // Serve static files
 const staticDir = path.join(__dirname, 'public/static');
@@ -31,7 +31,7 @@ async function searchMangaManganelo(query, numOfResults = 1) {
     const $el = $(el);
     results.push({
       name: $el.find('.story_name a').text().trim(),
-      url: $el.find('.story_name a').attr('href'),
+      url: $el.find('.story_chapter a').attr('href'),
       latest: $el.find('.story_chapter a').attr('title'),
       updated: $el.find('.story_item_right').text().match(/Updated : (.*)/)[1],
     });
