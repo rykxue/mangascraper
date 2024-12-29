@@ -63,16 +63,24 @@ async function searchMangaManganelo(input, numOfSearch) {
   return results;
 }
 
-async function downloadChapterManganelo(url) {
-  const { data } = await axios.get(url);
-  const $ = cheerio.load(data);
+async function downloadChapterManganelo(chapterUrl) {
+  try {
+    const { data } = await axios.get(chapterUrl); // Go to the chapter URL
+    const $ = cheerio.load(data);
 
-  const images = [];
-  $('.container-chapter-reader img').each((_, el) => {
-    images.push($(el).attr('src'));
-  });
+    const images = [];
+    $('.container-chapter-reader img').each((_, el) => {
+      const imgSrc = $(el).attr('src');
+      if (imgSrc) {
+        images.push(imgSrc); // Collect image sources
+      }
+    });
 
-  return images;
+    return images; // Return all image URLs
+  } catch (error) {
+    console.error(`Error fetching chapter from ${chapterUrl}:`, error.message);
+    throw new Error(`Failed to download chapter from ${chapterUrl}`);
+  }
 }
 
 // API Endpoints
