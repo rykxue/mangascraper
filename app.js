@@ -1,9 +1,12 @@
 import fs from 'fs/promises';
 import path from 'path';
 import axios from 'axios';
-const cheerio = require('cheerio');
+import cheerio from 'cheerio';
 import express from 'express';
-import puppeteer from 'puppeteer';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url); // Dynamically load CommonJS modules
+const puppeteer = require('puppeteer'); // Use require for Puppeteer if it causes issues
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -51,9 +54,9 @@ async function getChapterUrls(mangaUrl, chapterRange) {
 
   const chapterLinks = await page.evaluate((chapterRange) => {
     const links = {};
-    document.querySelectorAll('.row-content-chapter').forEach((el) => {
+    document.querySelectorAll('.row-content-chapter li').forEach((el) => {
       const chapterText = el.querySelector('.chapter-name')?.textContent || '';
-      const chapterNumber = parseInt(chapterText.match(/Chapter (\d+)/i)?.[1]);
+      const chapterNumber = parseFloat(chapterText.match(/Chapter (\d+(\.\d+)?)/i)?.[1]);
       if (chapterNumber && chapterRange.includes(chapterNumber)) {
         const link = el.querySelector('.chapter-name')?.getAttribute('href');
         links[chapterNumber] = link;
@@ -83,24 +86,19 @@ async function downloadChapterManganelo(url, title, chapter, outputDir, baseUrl)
       const filename = `${sanitizeFilename(title)}_chapter_${chapter}_${index + 1}.jpg`;
       const filePath = path.join(chapterDir, filename);
 
-      // Push download promise for parallel downloading
       downloadPromises.push(
         axios({
           url: imgUrl,
           method: 'GET',
           responseType: 'arraybuffer',
-        }).then((response) => {
-          return fs.writeFile(filePath, response.data);
-        })
+        }).then((response) => fs.writeFile(filePath, response.data))
       );
 
       images.push(`${baseUrl}/static/${sanitizeFilename(title)}/chapter_${chapter}/${filename}`);
     }
   });
 
-  // Wait for all downloads to complete
   await Promise.all(downloadPromises);
-
   return images;
 }
 
@@ -144,7 +142,7 @@ app.get('/api/manga', async (req, res) => {
     for (const [chapterNum, chapterUrl] of Object.entries(chapterUrls)) {
       const images = await downloadChapterManganelo(chapterUrl, manga.name, chapterNum, outputDir, req.protocol + '://' + req.get('host'));
       downloadedChapters[chapterNum] = images;
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Add delay between chapter downloads
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
 
     res.json({
@@ -161,18 +159,3 @@ app.get('/api/manga', async (req, res) => {
 
 // Start the server
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
-
-// Test the functionality
-const testManga = async () => {
-  try {
-    const mangaName = 'One Piece';
-    const chapterRange = '1-3';
-    const url = `http://localhost:${PORT}/api/manga?name=${encodeURIComponent(mangaName)}&chapter=${chapterRange}`;
-    const response = await axios.get(url);
-    console.log('API Response:', JSON.stringify(response.data, null, 2));
-  } catch (error) {
-    console.error('Test failed:', error.message);
-  }
-};
-
-testManga();
