@@ -1,12 +1,12 @@
 import fs from 'fs/promises';
 import path from 'path';
 import axios from 'axios';
-import cheerio from 'cheerio';
 import express from 'express';
 import { createRequire } from 'module';
 
-const require = createRequire(import.meta.url); // Dynamically load CommonJS modules
+const require = createRequire(import.meta.url);// Dynamically load CommonJS module
 const puppeteer = require('puppeteer'); // Use require for Puppeteer if it causes issues
+const cheerio = require('cheerio');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
