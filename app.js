@@ -8,7 +8,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Serve static files
-const staticDir = path.join(__dirname, 'public/static');
+const staticDir = path.join(process.cwd(), 'public/static');
 if (!fs.existsSync(staticDir)) {
   fs.mkdirSync(staticDir, { recursive: true });
 }
@@ -69,14 +69,9 @@ async function downloadChapterManganelo(url, title, chapter, outputDir, baseUrl)
         axios({
           url: imgUrl,
           method: 'GET',
-          responseType: 'stream',
+          responseType: 'arraybuffer'
         }).then((response) => {
-          return new Promise((resolve, reject) => {
-            const writer = fs.createWriteStream(filePath);
-            response.data.pipe(writer);
-            writer.on('finish', resolve);
-            writer.on('error', reject);
-          });
+          return fs.promises.writeFile(filePath, response.data);
         })
       );
 
@@ -131,6 +126,7 @@ app.get('/api/manga', async (req, res) => {
       const chapterUrl = `${manga.url}/chapter-${chapterNum}`;
       const images = await downloadChapterManganelo(chapterUrl, manga.name, chapterNum, outputDir, req.protocol + '://' + req.get('host'));
       downloadedChapters[chapterNum] = images;
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Add delay between chapter downloads
     }
 
     res.json({
@@ -147,3 +143,20 @@ app.get('/api/manga', async (req, res) => {
 
 // Start the server
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+
+// Test the functionality
+/*
+const testManga = async () => {
+  try {
+    const mangaName = 'One Piece';
+    const chapterRange = '1-3';
+    const url = `http://localhost:${PORT}/api/manga?name=${encodeURIComponent(mangaName)}&chapter=${chapterRange}`;
+    const response = await axios.get(url);
+    console.log('API Response:', JSON.stringify(response.data, null, 2));
+  } catch (error) {
+    console.error('Test failed:', error.message);
+  }
+};
+
+testManga();
+*/
