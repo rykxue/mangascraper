@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import axios from 'axios';
-import cheerio from 'cheerio';
+const cheerio = require('cheerio');
 import express from 'express';
 import puppeteer from 'puppeteer';
 
