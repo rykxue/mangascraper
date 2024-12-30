@@ -69,7 +69,7 @@ async function getChapterUrls(mangaUrl, chapterRange) {
 
 // Function to get chapter images using Puppeteer
 async function getChapterImagesFromChapmanganato(chapterUrl) {
-  const browser = await puppeteer.launch();
+  const browser = await puppeteer.launch({ headless: true });
   const page = await browser.newPage();
   await page.goto(chapterUrl, { waitUntil: 'networkidle0' }); // Wait for the page to load
 
