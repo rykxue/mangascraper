@@ -1,9 +1,9 @@
-const fs = require('fs');
-const path = require('path');
-const axios = require('axios');
-const cheerio = require('cheerio');
-const express = require('express');
-const puppeteer = require('puppeeter');
+import fs from 'fs/promises';
+import path from 'path';
+import axios from 'axios';
+import cheerio from 'cheerio';
+import express from 'express';
+import puppeteer from 'puppeteer';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
