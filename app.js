@@ -70,7 +70,7 @@ async function getChapterUrls(mangaUrl, chapterRange) {
 // Function to get chapter images using Puppeteer
 async function getChapterImagesFromChapmanganato(chapterUrl) {
   const browser = await puppeteer.launch({
-  executablePath: 'chrome@131.0.6778.204 /opt/render/.cache/puppeteer/chrome/linux-131.0.6778.204/chrome-linux64/chrome',
+  executablePath: '/opt/render/.cache/puppeteer/chrome/linux-131.0.6778.204/chrome-linux64/chrome',
   headless: true,
   args: ['--no-sandbox', '--disable-setuid-sandbox'], // Required for Render environments
 });
