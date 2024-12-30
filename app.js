@@ -31,7 +31,7 @@ async function searchMangaManganelo(query, numOfResults = 1) {
     const $el = $(el);
     results.push({
       name: $el.find('.story_name a').text().trim(),
-      url: $el.find('.story_name a').attr('href'),
+      url: $el.find('.story_chapter a').attr('href'),
       latest: $el.find('.story_chapter a').attr('title'),
       updated: $el.find('.story_item_right').text().match(/Updated : (.*)/)[1],
     });
