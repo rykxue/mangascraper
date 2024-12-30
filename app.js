@@ -31,7 +31,7 @@ async function searchMangaManganelo(query, numOfResults = 1) {
     const $el = $(el);
     results.push({
       name: $el.find('.story_name a').text().trim(),
-      url: $el.find('.story_chapter a').attr('href'),
+      url: $el.find('.story_name a').attr('href'),
       latest: $el.find('.story_chapter a').attr('title'),
       updated: $el.find('.story_item_right').text().match(/Updated : (.*)/)[1],
     });
@@ -45,13 +45,14 @@ async function searchMangaManganelo(query, numOfResults = 1) {
 }
 
 // Function to download images from a manga chapter
-async function downloadChapterManganelo(url, title, chapter, outputDir) {
+async function downloadChapterManganelo(url, title, chapter, outputDir, baseUrl) {
   const { data } = await axios.get(url);
   const $ = cheerio.load(data);
 
   const images = [];
   const downloadPromises = [];
   const chapterDir = path.join(outputDir, sanitizeFilename(`${title}_chapter_${chapter}`));
+  const publicPath = `${baseUrl}/static/${sanitizeFilename(title)}/chapter_${chapter}`;
 
   if (!fs.existsSync(chapterDir)) {
     fs.mkdirSync(chapterDir, { recursive: true });
@@ -79,7 +80,7 @@ async function downloadChapterManganelo(url, title, chapter, outputDir) {
         })
       );
 
-      images.push(`/static/${sanitizeFilename(title)}/chapter_${chapter}/${filename}`); // Public path
+      images.push(`${publicPath}/${filename}`); // Publicly accessible URL
     }
   });
 
@@ -89,19 +90,30 @@ async function downloadChapterManganelo(url, title, chapter, outputDir) {
   return images;
 }
 
+// Parse chapter ranges
+function parseChapterRange(range) {
+  const [start, end] = range.split('-').map(Number);
+  if (!start || !end || start > end) {
+    throw new Error('Invalid chapter range format. Use "start-end", e.g., "1-5".');
+  }
+  return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+}
+
 // API endpoint for searching and downloading manga chapters
 app.get('/api/manga', async (req, res) => {
-  const { name, chapters } = req.query;
+  const { name, chapter } = req.query;
 
   if (!name) {
     return res.status(400).json({ error: 'Name parameter is required.' });
   }
 
-  const chapterNumbers = chapters
-    ? chapters.split(',').map((ch) => parseInt(ch, 10)).filter((ch) => !isNaN(ch))
-    : [];
+  if (!chapter) {
+    return res.status(400).json({ error: 'Chapter parameter is required.' });
+  }
 
   try {
+    const chapterNumbers = parseChapterRange(chapter);
+
     const searchResults = await searchMangaManganelo(name, 1);
     if (searchResults.length === 0) {
       return res.status(404).json({ error: 'No manga found.' });
@@ -115,10 +127,10 @@ app.get('/api/manga', async (req, res) => {
     }
 
     const downloadedChapters = {};
-    for (const chapter of chapterNumbers) {
-      const chapterUrl = `${manga.url}/chapter-${chapter}`;
-      const images = await downloadChapterManganelo(chapterUrl, manga.name, chapter, outputDir);
-      downloadedChapters[chapter] = images;
+    for (const chapterNum of chapterNumbers) {
+      const chapterUrl = `${manga.url}/chapter-${chapterNum}`;
+      const images = await downloadChapterManganelo(chapterUrl, manga.name, chapterNum, outputDir, req.protocol + '://' + req.get('host'));
+      downloadedChapters[chapterNum] = images;
     }
 
     res.json({
