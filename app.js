@@ -174,7 +174,7 @@ async function downloadChapterManga4life(slug, chapter) {
   const images = [];
   for (let i = 1; i <= totalPages; i++) {
     const pageNumber = i.toString().padStart(3, '0');
-    images.push(`https://scans-hot.planeptune.us/manga/${slug}${directory}/${chNumber}-${pageNumber}.png`);
+    images.push(`https://hot.planeptune.us/manga/${slug}${directory}/${chNumber}-${pageNumber}.png`);
   }
 
   return images;
@@ -274,10 +274,8 @@ app.get('/manga', async (req, res) => {
     const chapterList = parseChapterRange(chapters);
 
     const mangaData = {
-      mangaTitle: mangaInfo.mangaTitle,
+      manga: mangaInfo.mangaTitle,
       source,
-      quality,
-      language,
       chapters: [],
     };
 
@@ -313,7 +311,7 @@ app.get('/manga', async (req, res) => {
       const filteredImages = quality === 'low' ? images.filter((_, index) => index % 2 === 0) : images;
 
       mangaData.chapters.push({
-        chapterNumber: chapterNum,
+        chapter: chapterNum,
         images: filteredImages,
       });
     }
