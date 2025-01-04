@@ -1,192 +1,178 @@
-import fs from 'fs/promises';
-import path from 'path';
-import axios from 'axios';
-import express from 'express';
-import { createRequire } from 'module';
-
-const require = createRequire(import.meta.url);
-const puppeteer = require('puppeteer');
+const express = require('express');
+const axios = require('axios');
 const cheerio = require('cheerio');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const port = process.env.PORT || 3000;
 
-// Serve static files
-const staticDir = path.join(process.cwd(), 'public/static');
-await fs.mkdir(staticDir, { recursive: true });
-app.use('/static', express.static(staticDir));
-
-// Utility function to sanitize filenames
-function sanitizeFilename(name) {
-  return name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-}
-
-// Function to search for manga on Mangakakalot
-async function searchMangaManganelo(query, numOfResults = 1) {
-  const url = `https://mangakakalot.com/search/story/${encodeURIComponent(query.replace(/ /g, '_'))}`;
+// Helper function to fetch HTML content
+async function fetchHTML(url) {
   const { data } = await axios.get(url);
-  const $ = cheerio.load(data);
+  return cheerio.load(data);
+}
 
-  const results = [];
-  $('.story_item').each((i, el) => {
-    if (i >= numOfResults) return false;
-    const $el = $(el);
-    results.push({
-      name: $el.find('.story_name a').text().trim(),
-      url: $el.find('.story_name a').attr('href'),
-      latest: $el.find('.story_chapter a').attr('title'),
-      updated: $el.find('.story_item_right').text().match(/Updated : (.*)/)[1],
-    });
-  });
+// Helper function to extract manga information
+async function getMangaInfo(name, source = 'mangadex') {
+  let mangaId, mangaTitle;
 
-  if (results.length === 0) {
-    throw new Error('No manga found');
+  switch (source) {
+    case 'mangadex':
+      const searchResponse = await axios.get(`https://api.mangadex.org/manga`, {
+        params: {
+          title: name,
+          limit: 1,
+          order: { relevance: 'desc' }
+        }
+      });
+      if (searchResponse.data.data.length === 0) {
+        throw new Error('Manga not found');
+      }
+      mangaId = searchResponse.data.data[0].id;
+      mangaTitle = searchResponse.data.data[0].attributes.title.en;
+      return { mangaId, mangaTitle };
+
+    case 'mangafox':
+      const searchUrl = `https://fanfox.net/search?k=${encodeURIComponent(name)}`;
+      const $ = await fetchHTML(searchUrl);
+      const firstResult = $('.line-list li').first();
+      const mangaUrl = firstResult.find('.manga-list-4-item-title a').attr('href');
+      mangaTitle = firstResult.find('.manga-list-4-item-title').text().trim();
+      if (!mangaUrl) {
+        throw new Error('Manga not found');
+      }
+      return { mangaUrl: `https://fanfox.net${mangaUrl}`, mangaTitle };
+
+    case 'mangakakalot':
+      const kakalotSearchUrl = `https://mangakakalot.com/search/story/${encodeURIComponent(name)}`;
+      const $kakalot = await fetchHTML(kakalotSearchUrl);
+      const kakalotFirstResult = $('.story_item').first();
+      const kakalotMangaUrl = kakalotFirstResult.find('.story_name a').attr('href');
+      mangaTitle = kakalotFirstResult.find('.story_name a').text().trim();
+      if (!kakalotMangaUrl) {
+        throw new Error('Manga not found');
+      }
+      return { mangaUrl: kakalotMangaUrl, mangaTitle };
+
+    default:
+      throw new Error('Unsupported source');
   }
-
-  return results;
 }
 
-// Function to get chapter URLs from Chapmanganato
-async function getChapterUrls(mangaUrl, chapterRange) {
-  const { data } = await axios.get(mangaUrl);
-  const $ = cheerio.load(data);
+// Helper function to get chapter images
+async function getChapterImages(chapterInfo, source) {
+  switch (source) {
+    case 'mangadex':
+      const { data } = await axios.get(`https://api.mangadex.org/at-home/server/${chapterInfo.id}`);
+      const baseUrl = data.baseUrl;
+      const chapterHash = data.chapter.hash;
+      return data.chapter.data.map(page => `${baseUrl}/data/${chapterHash}/${page}`);
 
-  const chapterLinks = {};
+    case 'mangafox':
+      const $ = await fetchHTML(chapterInfo.url);
+      return $('.reader-main .reader-main-img').map((_, elem) => $(elem).attr('data-src')).get();
 
-  // Iterate over each chapter item in the list
-  $('ul.row-content-chapter li.a-h').each((_, el) => {
-    const chapterText = $(el).find('.chapter-name').text();
-    const chapterUrl = $(el).find('a').attr('href');
-    const chapterNumber = parseInt(chapterText.match(/Chapter (\d+(\.\d+)?)/i)?.[1]);
+    case 'mangakakalot':
+      const $kakalot = await fetchHTML(chapterInfo.url);
+      return $('.container-chapter-reader img').map((_, elem) => $(elem).attr('src')).get();
 
-    if (chapterNumber && chapterRange.includes(chapterNumber)) {
-      chapterLinks[chapterNumber] = chapterUrl;
-    }
-  });
-
-  return chapterLinks;
+    default:
+      throw new Error('Unsupported source');
+  }
 }
 
-// Function to get chapter images using Puppeteer
-async function getChapterImagesFromChapmanganato(chapterUrl) {
-  const browser = await puppeteer.launch({
-  executablePath: '/opt/render/.cache/puppeteer/chrome/linux-131.0.6778.204/chrome-linux64/chrome/chrome/linux-131.0.6778.204/chrome-linux64/chrome',
-  headless: true,
-  args: ['--no-sandbox', '--disable-setuid-sandbox'], // Required for Render environments
-});
-  const page = await browser.newPage();
-  await page.goto(chapterUrl, { waitUntil: 'networkidle0' }); // Wait for the page to load
-
-  // Extract image URLs from the page
-  const images = await page.evaluate(() => {
-    const imgElements = document.querySelectorAll('.container-chapter-reader img');
-    return Array.from(imgElements).map(img => img.src || img.dataset.src);
-  });
-
-  await browser.close();
-  return images;
-}
-
-// Function to download images from a manga chapter
-async function downloadChapterManganelo(url, title, chapter, outputDir, baseUrl) {
-  const images = await getChapterImagesFromChapmanganato(url);
-
-  const downloadPromises = [];
-  const chapterDir = path.join(outputDir, sanitizeFilename(`${title}_chapter_${chapter}`));
-
-  await fs.mkdir(chapterDir, { recursive: true });
-
-  images.forEach((imgUrl, index) => {
-    const filename = `${sanitizeFilename(title)}_chapter_${chapter}_${index + 1}.jpg`;
-    const filePath = path.join(chapterDir, filename);
-
-    // Push download promise for parallel downloading
-    downloadPromises.push(
-      axios({
-        url: imgUrl,
-        method: 'GET',
-        responseType: 'arraybuffer',
-      }).then((response) => {
-        return fs.writeFile(filePath, response.data);
-      })
-    );
-  });
-
-  // Wait for all downloads to complete
-  await Promise.all(downloadPromises);
-
-  return images.map(imgUrl => `${baseUrl}/static/${sanitizeFilename(title)}/chapter_${chapter}/${sanitizeFilename(title)}_chapter_${chapter}_${images.indexOf(imgUrl) + 1}.jpg`);
-}
-
-// Parse chapter ranges
+// Helper function to parse chapter range
 function parseChapterRange(range) {
-  const [start, end] = range.split('-').map(Number);
-  if (!start || !end || start > end) {
-    throw new Error('Invalid chapter range format. Use "start-end", e.g., "1-5".');
+  const parts = range.split('-');
+  if (parts.length === 1) {
+    return [parseInt(parts[0], 10)];
+  } else if (parts.length === 2) {
+    const start = parseInt(parts[0], 10);
+    const end = parseInt(parts[1], 10);
+    return Array.from({length: end - start + 1}, (_, i) => start + i);
+  } else {
+    throw new Error('Invalid chapter range format');
   }
-  return Array.from({ length: end - start + 1 }, (_, i) => start + i);
 }
 
-// API endpoint for searching and downloading manga chapters
-app.get('/api/manga', async (req, res) => {
-  const { name, chapter } = req.query;
+app.get('/readmanga', async (req, res) => {
+  const { name, chapters, source = 'mangadex', format = 'json', quality = 'high' } = req.query;
 
-  if (!name) {
-    return res.status(400).json({ error: 'Name parameter is required.' });
-  }
-
-  if (!chapter) {
-    return res.status(400).json({ error: 'Chapter parameter is required.' });
+  if (!name || !chapters) {
+    return res.status(400).json({ error: 'Missing name or chapters parameter' });
   }
 
   try {
-    const chapterRange = parseChapterRange(chapter);
+    const mangaInfo = await getMangaInfo(name, source);
+    const chapterList = parseChapterRange(chapters);
 
-    const searchResults = await searchMangaManganelo(name, 1);
-    if (searchResults.length === 0) {
-      return res.status(404).json({ error: 'No manga found.' });
+    const mangaData = {
+      mangaTitle: mangaInfo.mangaTitle,
+      source,
+      quality,
+      chapters: []
+    };
+
+    for (const chapterNum of chapterList) {
+      let chapterInfo;
+
+      if (source === 'mangadex') {
+        const chapterResponse = await axios.get(`https://api.mangadex.org/chapter`, {
+          params: {
+            manga: mangaInfo.mangaId,
+            chapter: chapterNum.toString(),
+            translatedLanguage: ['en'],
+            limit: 1
+          }
+        });
+        if (chapterResponse.data.data.length === 0) {
+          console.warn(`Chapter ${chapterNum} not found for ${mangaInfo.mangaTitle}`);
+          continue;
+        }
+        chapterInfo = { id: chapterResponse.data.data[0].id };
+      } else {
+        chapterInfo = {
+          url: source === 'mangafox' 
+            ? `${mangaInfo.mangaUrl}chapter-${chapterNum}.html`
+            : `${mangaInfo.mangaUrl}/chapter-${chapterNum}`
+        };
+      }
+
+      const images = await getChapterImages(chapterInfo, source);
+
+      // Apply quality filter
+      const filteredImages = quality === 'low' ? images.filter((_, index) => index % 2 === 0) : images;
+
+      mangaData.chapters.push({
+        chapterNumber: chapterNum,
+        images: filteredImages
+      });
     }
 
-    const manga = searchResults[0];
-    const sanitizedTitle = sanitizeFilename(manga.name);
-    const outputDir = path.join(staticDir, sanitizedTitle);
-    await fs.mkdir(outputDir, { recursive: true });
-
-    const chapterUrls = await getChapterUrls(manga.url, chapterRange);
-    const downloadedChapters = {};
-
-    for (const [chapterNum, chapterUrl] of Object.entries(chapterUrls)) {
-      const images = await downloadChapterManganelo(chapterUrl, manga.name, chapterNum, outputDir, req.protocol + '://' + req.get('host'));
-      downloadedChapters[chapterNum] = images;
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Add delay between chapter downloads
+    if (format === 'xml') {
+      res.set('Content-Type', 'application/xml');
+      let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<manga>\n';
+      xml += `  <title>${mangaData.mangaTitle}</title>\n`;
+      xml += `  <source>${source}</source>\n`;
+      xml += `  <quality>${quality}</quality>\n`;
+      xml += '  <chapters>\n';
+      mangaData.chapters.forEach(chapter => {
+        xml += `    <chapter number="${chapter.chapterNumber}">\n`;
+        chapter.images.forEach(img => {
+          xml += `      <image>${img}</image>\n`;
+        });
+        xml += '    </chapter>\n';
+      });
+      xml += '  </chapters>\n</manga>';
+      res.send(xml);
+    } else {
+      res.json(mangaData);
     }
-
-    res.json({
-      title: manga.name,
-      url: manga.url,
-      latest: manga.latest,
-      chapters: downloadedChapters,
-    });
   } catch (error) {
-    console.error(error.message);
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch manga data', message: error.message });
   }
 });
 
-// Start the server
-app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
-
-// Test the functionality
-const testManga = async () => {
-  try {
-    const mangaName = 'One Piece';
-    const chapterRange = '1-3';
-    const url = `http://localhost:${PORT}/api/manga?name=${encodeURIComponent(mangaName)}&chapter=${chapterRange}`;
-    const response = await axios.get(url);
-    console.log('API Response:', JSON.stringify(response.data, null, 2));
-  } catch (error) {
-    console.error('Test failed:', error.message);
-  }
-};
-
-testManga();
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
+});
