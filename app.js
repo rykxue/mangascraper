@@ -58,16 +58,20 @@ async function downloadChapterManganelo(url, referer) {
   return images;
 }
 
-async function getMangaInfo(name, source = 'mangadex') {
+async function getMangaInfo(name, source = 'mangadex', translatedLanguage = null) {
   switch (source) {
     case 'mangadex': {
-      const searchResponse = await axios.get(`https://api.mangadex.org/manga`, {
-        params: {
-          title: name,
-          limit: 1,
-          order: { relevance: 'desc' },
-        },
-      });
+      const params = {
+        title: name,
+        limit: 1,
+        order: { relevance: 'desc' },
+      };
+
+      if (translatedLanguage) {
+        params.translatedLanguage = translatedLanguage;
+      }
+
+      const searchResponse = await axios.get(`https://api.mangadex.org/manga`, { params });
 
       if (searchResponse.data.data.length === 0) {
         throw new Error('Manga not found');
@@ -123,14 +127,14 @@ function parseChapterRange(range) {
 }
 
 app.get('/manga', async (req, res) => {
-  const { name, chapters, source = 'mangadex', quality = 'high' } = req.query;
+  const { name, chapters, source = 'mangadex', quality = 'high', tl } = req.query;
 
   if (!name || !chapters) {
     return res.status(400).json({ error: 'Missing name or chapters parameter' });
   }
 
   try {
-    const mangaInfo = await getMangaInfo(name, source);
+    const mangaInfo = await getMangaInfo(name, source, tl || null); // Pass translated language if specified
     const chapterList = parseChapterRange(chapters);
 
     const mangaData = {
@@ -148,7 +152,7 @@ app.get('/manga', async (req, res) => {
           params: {
             manga: mangaInfo.mangaId,
             chapter: chapterNum.toString(),
-            translatedLanguage: ['en'],
+            translatedLanguage: tl || [], // Use empty array if no tl specified
             limit: 1,
           },
         });
