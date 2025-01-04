@@ -114,6 +114,72 @@ async function downloadChapterManganelo(url, referer, mangaTitle, chapterNum, ba
   return downloadedImages;
 }
 
+async function searchMangaManga4life(input, numOfSearch) {
+  const url = 'https://manga4life.com/search/';
+  const { data } = await axios.get(url);
+  const $ = cheerio.load(data);
+
+  const scriptContent = $('script:contains("vm.Directory")').html();
+  const mangaList = JSON.parse(scriptContent.match(/vm\.Directory = (.*);/)[1]);
+
+  const results = mangaList
+    .filter(manga => manga.s.toLowerCase().includes(input.toLowerCase()))
+    .slice(0, numOfSearch)
+    .map(manga => ({
+      name: manga.s,
+      slug: manga.i,
+      latest: manga.l,
+      status: manga.ss,
+      updated: manga.ls
+    }));
+
+  if (results.length === 0) {
+    throw new Error('No manga found');
+  }
+
+  return results;
+}
+
+async function fetchMangaDetailsManga4life(slug) {
+  const url = `https://manga4life.com/manga/${slug}`;
+  const { data } = await axios.get(url);
+  const $ = cheerio.load(data);
+
+  const scriptContent = $('script:contains("vm.Chapters")').html();
+  const chaptersData = JSON.parse(scriptContent.match(/vm\.Chapters = (.*);/)[1]);
+
+  const pages = chaptersData.map(chapter => {
+    const chapterNumber = chapter.Chapter.slice(1, -1);
+    return parseFloat(chapterNumber) || parseInt(chapterNumber);
+  }).sort((a, b) => b - a);
+
+  return {
+    pages,
+    referer: 'manga4life.com'
+  };
+}
+
+async function downloadChapterManga4life(slug, chapter) {
+  const url = `https://manga4life.com/read-online/${slug}-chapter-${chapter}-index-1.html`;
+  const { data } = await axios.get(url);
+  const $ = cheerio.load(data);
+
+  const scriptContent = $('script:contains("vm.CurChapter")').html();
+  const chapterData = JSON.parse(scriptContent.match(/vm\.CurChapter = (.*);/)[1]);
+
+  const directory = chapterData.Directory !== '' ? `/${chapterData.Directory}` : '';
+  const chNumber = chapterData.Chapter.slice(1, -1).padStart(4, '0');
+  const totalPages = parseInt(chapterData.Page);
+
+  const images = [];
+  for (let i = 1; i <= totalPages; i++) {
+    const pageNumber = i.toString().padStart(3, '0');
+    images.push(`https://scans-hot.planeptune.us/manga/${slug}${directory}/${chNumber}-${pageNumber}.png`);
+  }
+
+  return images;
+}
+
 async function getMangaInfo(name, source = 'mangadex', language = 'en') {
   switch (source) {
     case 'mangadex': {
@@ -145,6 +211,16 @@ async function getMangaInfo(name, source = 'mangadex', language = 'en') {
         referer: searchResult[0].referer,
       };
     }
+    case 'manga4life': {
+      const searchResult = await searchMangaManga4life(name, 1);
+      const mangaDetails = await fetchMangaDetailsManga4life(searchResult[0].slug);
+      return {
+        mangaSlug: searchResult[0].slug,
+        mangaTitle: searchResult[0].name,
+        chapters: mangaDetails.pages,
+        referer: mangaDetails.referer,
+      };
+    }
     default:
       throw new Error('Unsupported source');
   }
@@ -161,6 +237,9 @@ async function getChapterImages(chapterInfo, source, referer, mangaTitle, chapte
     case 'mangazero': {
       const images = await downloadChapterManganelo(chapterInfo.url, referer, mangaTitle, chapterNum, baseUrl);
       return images.map(img => img.localPath);
+    }
+    case 'manga4life': {
+      return await downloadChapterManga4life(chapterInfo.mangaSlug, chapterNum);
     }
     default:
       throw new Error('Unsupported source');
@@ -220,9 +299,13 @@ app.get('/manga', async (req, res) => {
           continue;
         }
         chapterInfo = { id: chapterResponse.data[0].id };
-      } else {
+      } else if (source === 'mangazero') {
         chapterInfo = {
           url: `${mangaInfo.mangaUrl}/chapter-${chapterNum}`,
+        };
+      } else if (source === 'manga4life') {
+        chapterInfo = {
+          mangaSlug: mangaInfo.mangaSlug,
         };
       }
 
