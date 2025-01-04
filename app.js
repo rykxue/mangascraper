@@ -3,9 +3,18 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const fs = require('fs').promises;
 const path = require('path');
+const url = require('url');
 
 const app = express();
 const port = process.env.PORT || 10001;
+
+// Serve static files from the downloads directory with custom headers
+app.use('/images', (req, res, next) => {
+  // Set headers to allow image viewing
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+}, express.static('downloads'));
 
 // Utility function to handle HTTP requests with retries
 async function fetchWithRetry(url, options = {}, retries = 3) {
@@ -18,6 +27,11 @@ async function fetchWithRetry(url, options = {}, retries = 3) {
       await new Promise(res => setTimeout(res, 1000 * Math.pow(2, i))); // Exponential backoff
     }
   }
+}
+
+// Get the base URL for the server
+function getBaseUrl(req) {
+  return `${req.protocol}://${req.get('host')}`;
 }
 
 async function searchMangaManganelo(input, numOfSearch) {
@@ -64,7 +78,7 @@ async function fetchMangaDetailsManganelo(url) {
   };
 }
 
-async function downloadChapterManganelo(url, referer, mangaTitle, chapterNum) {
+async function downloadChapterManganelo(url, referer, mangaTitle, chapterNum, baseUrl) {
   const data = await fetchWithRetry(url, { headers: { Referer: referer } });
   const $ = cheerio.load(data);
 
@@ -74,7 +88,9 @@ async function downloadChapterManganelo(url, referer, mangaTitle, chapterNum) {
     if (src) images.push(src);
   });
 
-  const chapterFolder = path.join('downloads', mangaTitle, `chapter-${chapterNum}`);
+  // Sanitize manga title for file system
+  const safeMangaTitle = mangaTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  const chapterFolder = path.join('downloads', safeMangaTitle, `chapter-${chapterNum}`);
   await fs.mkdir(chapterFolder, { recursive: true });
 
   const downloadedImages = await Promise.all(images.map(async (imageUrl, index) => {
@@ -82,13 +98,16 @@ async function downloadChapterManganelo(url, referer, mangaTitle, chapterNum) {
       responseType: 'arraybuffer',
       headers: { Referer: referer }
     });
-    const extension = path.extname(imageUrl);
-    const filename = `page-${index + 1}${extension}`;
+    const extension = path.extname(imageUrl) || '.jpg'; // Fallback to .jpg if no extension
+    const filename = `page-${(index + 1).toString().padStart(3, '0')}${extension}`;
     const filePath = path.join(chapterFolder, filename);
     await fs.writeFile(filePath, imageResponse.data);
+
+    // Generate web-accessible URL for the downloaded image
+    const relativePath = path.join(safeMangaTitle, `chapter-${chapterNum}`, filename).replace(/\\/g, '/');
     return {
       originalUrl: imageUrl,
-      localPath: filePath
+      localPath: `${baseUrl}/images/${relativePath}`
     };
   }));
 
@@ -131,7 +150,7 @@ async function getMangaInfo(name, source = 'mangadex', language = 'en') {
   }
 }
 
-async function getChapterImages(chapterInfo, source, referer, mangaTitle, chapterNum) {
+async function getChapterImages(chapterInfo, source, referer, mangaTitle, chapterNum, baseUrl) {
   switch (source) {
     case 'mangadex': {
       const data = await fetchWithRetry(`https://api.mangadex.org/at-home/server/${chapterInfo.id}`);
@@ -139,11 +158,11 @@ async function getChapterImages(chapterInfo, source, referer, mangaTitle, chapte
       const chapterHash = data.chapter.hash;
       return data.chapter.data.map(page => ({
         originalUrl: `${baseUrl}/data/${chapterHash}/${page}`,
-        localPath: null
+        localPath: `${baseUrl}/data/${chapterHash}/${page}`
       }));
     }
     case 'mangazero': {
-      return await downloadChapterManganelo(chapterInfo.url, referer, mangaTitle, chapterNum);
+      return await downloadChapterManganelo(chapterInfo.url, referer, mangaTitle, chapterNum, baseUrl);
     }
     default:
       throw new Error('Unsupported source');
@@ -173,6 +192,7 @@ app.get('/manga', async (req, res) => {
   }
 
   try {
+    const baseUrl = getBaseUrl(req);
     const mangaInfo = await getMangaInfo(name, source, language);
     const chapterList = parseChapterRange(chapters);
 
@@ -208,7 +228,7 @@ app.get('/manga', async (req, res) => {
         };
       }
 
-      const images = await getChapterImages(chapterInfo, source, mangaInfo.referer, mangaInfo.mangaTitle, chapterNum);
+      const images = await getChapterImages(chapterInfo, source, mangaInfo.referer, mangaInfo.mangaTitle, chapterNum, baseUrl);
       const filteredImages = quality === 'low' ? images.filter((_, index) => index % 2 === 0) : images;
 
       mangaData.chapters.push({
@@ -230,6 +250,11 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error', message: err.message });
 });
 
+// Create downloads directory if it doesn't exist
+fs.mkdir('downloads', { recursive: true }).catch(console.error);
+
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
+  console.log(`Access downloaded manga at http://localhost:${port}/images/`);
 });
+
