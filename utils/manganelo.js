@@ -2,7 +2,7 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 
 async function searchMangaManganelo(input, numOfSearch) {
-  const url = `https://manganato.com/search/story/${encodeURIComponent(input.replace(/ /g, '_'))}`;
+  const url = `https://m.manganelo.com/search/story/${encodeURIComponent(input.replace(/ /g, '_'))}`;
   const { data } = await axios.get(url);
   const $ = cheerio.load(data);
 
@@ -11,10 +11,10 @@ async function searchMangaManganelo(input, numOfSearch) {
     if (i >= numOfSearch) return false;
     const $el = $(el);
     results.push({
-      name: $el.find('.item-title a').text().trim(),
-      url: $el.find('.item-chapter a').attr('href'),
-      latest: $el.find('.item-chapter a').attr('title'),
-      updated: $el.find('.item-time').text().match(/Updated : (.*)/)[1]
+      name: $el.find('.story_name a').text().trim(),
+      url: $el.find('.story_name a').attr('href'),
+      latest: $el.find('.story_chapter a').attr('title'),
+      updated: $el.find('.story_item_right').text().match(/Updated : (.*)/)[1]
     });
   });
 
@@ -38,7 +38,7 @@ async function fetchMangaDetailsManganelo(url) {
 
   return {
     pages: pages.reverse(),
-    referer: 'chapmanganato.to'
+    referer: 'manganelo.com'
   };
 }
 
@@ -59,4 +59,3 @@ module.exports = {
   fetchMangaDetailsManganelo,
   downloadChapterManganelo
 };
-
