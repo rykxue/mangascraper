@@ -6,7 +6,7 @@ const app = express();
 const port = process.env.PORT || 10001;
 
 async function searchMangaManganelo(input, numOfSearch) {
-  const url = `https://m.manganelo.com/search/story/${encodeURIComponent(input.replace(/ /g, '_'))}`;
+  const url = `https://mangakakalot.com/search/story/${encodeURIComponent(input.replace(/ /g, '_'))}`;
   const { data } = await axios.get(url);
   const $ = cheerio.load(data);
 
@@ -17,7 +17,7 @@ async function searchMangaManganelo(input, numOfSearch) {
     results.push({
       name: $el.find('.story_name a').text().trim(),
       url: $el.find('.story_name a').attr('href'),
-      referer: $el.find('.story_name a').attr('href'), // Extract referer from the chapter URL
+      referer: $el.find('.story_name a').attr('href'),
       latest: $el.find('.story_chapter a').attr('title'),
       updated: $el.find('.story_item_right').text().match(/Updated : (.*)/)[1],
     });
@@ -58,20 +58,16 @@ async function downloadChapterManganelo(url, referer) {
   return images;
 }
 
-async function getMangaInfo(name, source = 'mangadex', translatedLanguage = null) {
+async function getMangaInfo(name, source = 'mangadex', language) {
   switch (source) {
     case 'mangadex': {
-      const params = {
-        title: name,
-        limit: 1,
-        order: { relevance: 'desc' },
-      };
-
-      if (translatedLanguage) {
-        params.translatedLanguage = translatedLanguage;
-      }
-
-      const searchResponse = await axios.get(`https://api.mangadex.org/manga`, { params });
+      const searchResponse = await axios.get(`https://api.mangadex.org/manga`, {
+        params: {
+          title: name,
+          limit: 1,
+          order: { relevance: 'desc' },
+        },
+      });
 
       if (searchResponse.data.data.length === 0) {
         throw new Error('Manga not found');
@@ -80,6 +76,7 @@ async function getMangaInfo(name, source = 'mangadex', translatedLanguage = null
       return {
         mangaId: searchResponse.data.data[0].id,
         mangaTitle: searchResponse.data.data[0].attributes.title.en,
+        language,
       };
     }
     case 'mangazero': {
@@ -89,7 +86,7 @@ async function getMangaInfo(name, source = 'mangadex', translatedLanguage = null
         mangaUrl: searchResult[0].url,
         mangaTitle: searchResult[0].name,
         chapters: mangaDetails.pages,
-        referer: searchResult[0].referer, // Pass referer for future use
+        referer: searchResult[0].referer,
       };
     }
     default:
@@ -134,13 +131,14 @@ app.get('/manga', async (req, res) => {
   }
 
   try {
-    const mangaInfo = await getMangaInfo(name, source, tl || null); // Pass translated language if specified
+    const mangaInfo = await getMangaInfo(name, source, tl);
     const chapterList = parseChapterRange(chapters);
 
     const mangaData = {
       mangaTitle: mangaInfo.mangaTitle,
       source,
       quality,
+      language: tl,
       chapters: [],
     };
 
@@ -152,7 +150,7 @@ app.get('/manga', async (req, res) => {
           params: {
             manga: mangaInfo.mangaId,
             chapter: chapterNum.toString(),
-            translatedLanguage: tl || [], // Use empty array if no tl specified
+            translatedLanguage: tl ? [tl] : undefined,
             limit: 1,
           },
         });
