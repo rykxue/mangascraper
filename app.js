@@ -156,13 +156,11 @@ async function getChapterImages(chapterInfo, source, referer, mangaTitle, chapte
       const data = await fetchWithRetry(`https://api.mangadex.org/at-home/server/${chapterInfo.id}`);
       const baseUrl = data.baseUrl;
       const chapterHash = data.chapter.hash;
-      return data.chapter.data.map(page => ({
-        originalUrl: `${baseUrl}/data/${chapterHash}/${page}`,
-        localPath: `${baseUrl}/data/${chapterHash}/${page}`
-      }));
+      return data.chapter.data.map(page => `${baseUrl}/data/${chapterHash}/${page}`);
     }
     case 'mangazero': {
-      return await downloadChapterManganelo(chapterInfo.url, referer, mangaTitle, chapterNum, baseUrl);
+      const images = await downloadChapterManganelo(chapterInfo.url, referer, mangaTitle, chapterNum, baseUrl);
+      return images.map(img => img.localPath);
     }
     default:
       throw new Error('Unsupported source');
@@ -257,4 +255,3 @@ app.listen(port, () => {
   console.log(`Server running on port ${port}`);
   console.log(`Access downloaded manga at http://localhost:${port}/images/`);
 });
-
