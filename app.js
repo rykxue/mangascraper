@@ -10,6 +10,12 @@ const { searchWeebverse2, fetchInfoWeebverse2, downloadChapterWeebverse2 } = req
 const app = express();
 const port = process.env.PORT || 10001;
 
+app.use(express.static('public'));
+
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/public/index.html');
+};
+
 app.use('/images', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
