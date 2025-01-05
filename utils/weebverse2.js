@@ -1,6 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-const { levenshtein } = require('fast-levenshtein'); // Install with `npm install fast-levenshtein`
+const levenshtein = require('fast-levenshtein'); // Install with `npm install fast-levenshtein`
 
 function normalizeString(str) {
   return str.toLowerCase().replace(/[^a-z0-9]/g, '');
