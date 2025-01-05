@@ -101,7 +101,7 @@ function parseChapterRange(range) {
 }
 
 app.get('/manga', async (req, res) => {
-  const { name, chapters, source = 'mangadex', quality = 'high', language = 'en' } = req.query;
+  const { name, chapters, source = 'weebverse', quality = 'high', language = 'en' } = req.query;
 
   if (!name || !chapters) {
     return res.status(400).json({ error: 'Missing name or chapters parameter' });
