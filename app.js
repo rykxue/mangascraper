@@ -88,17 +88,26 @@ async function getChapterImages(chapterInfo, source, referer, mangaTitle, chapte
 function parseChapterRange(range) {
   const parts = range.split('-').map(part => parseFloat(part.trim()));
   if (parts.length === 1) {
+    // Single chapter (e.g., "3.5")
+    if (isNaN(parts[0])) {
+      throw new Error('Invalid chapter number');
+    }
     return [parts[0]];
   } else if (parts.length === 2) {
+    // Range (e.g., "1-3.5")
     const [start, end] = parts;
     if (isNaN(start) || isNaN(end) || start > end) {
       throw new Error('Invalid chapter range format');
     }
-    return Array.from({ length: Math.floor(end - start + 1) }, (_, i) => start + i);
+    const result = [];
+    for (let i = start; i <= end; i += 0.5) {
+      result.push(Number(i.toFixed(1)));
+    }
+    return result;
   } else {
     throw new Error('Invalid chapter range format');
   }
-}
+             }
 
 app.get('/manga', async (req, res) => {
   const { name, chapters, source = 'weebverse', quality = 'high', language = 'en' } = req.query;
