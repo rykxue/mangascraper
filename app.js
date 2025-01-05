@@ -5,6 +5,7 @@ const path = require('path');
 
 const { searchMangazero, fetchInfoMangazero, downloadChapterMangazero } = require('./utils/mangazero');
 const { searchWeebverse, fetchInfoWeebverse, downloadChapterWeebverse } = require('./utils/weebverse');
+const { searchWeebverse2, fetchInfoWeebverse2, downloadChapterWeebverse2 } = require('./utils/weebverse2');
 
 const app = express();
 const port = process.env.PORT || 10001;
@@ -60,6 +61,16 @@ async function getMangaInfo(name, source = 'mangadex', language = 'en') {
         referer: mangaDetails.referer,
       };
     }
+    case 'weebverse2': {
+      const searchResult = await searchWeebverse2(name, 1);
+      const mangaDetails = await fetchInfoWeebverse2(searchResult[0].slug);
+      return {
+        mangaSlug: searchResult[0].slug,
+        mangaTitle: searchResult[0].name,
+        chapters: mangaDetails.pages,
+        referer: mangaDetails.referer,
+      };
+    }
     default:
       throw new Error('Unsupported source');
   }
@@ -79,6 +90,9 @@ async function getChapterImages(chapterInfo, source, referer, mangaTitle, chapte
     }
     case 'weebverse': {
       return await downloadChapterWeebverse(chapterInfo.mangaSlug, chapterNum);
+    }
+    case 'weebverse2': {
+    	return await downloadChapterWeebverse2(chapterInfo.mangaSlug, chapterNum);
     }
     default:
       throw new Error('Unsupported source');
@@ -151,6 +165,10 @@ app.get('/manga', async (req, res) => {
           url: `${mangaInfo.mangaUrl}/chapter-${chapterNum}`,
         };
       } else if (source === 'weebverse') {
+        chapterInfo = {
+          mangaSlug: mangaInfo.mangaSlug,
+        };
+      } else if (source === 'weebverse2') {
         chapterInfo = {
           mangaSlug: mangaInfo.mangaSlug,
         };
