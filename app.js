@@ -14,11 +14,11 @@ app.use(express.static('public'));
 
 app.get('/', (req, res) => {
   res.sendFile(__dirname + '/public/index.html');
-};
+});
 
 app.get('*', (req, res) => {
   res.sendFile(__dirname + '/public/error.html');
-}
+});
 
 app.use('/images', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
