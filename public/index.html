@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manga API Documentation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #3498db;
+            --secondary-color: #2c3e50;
+            --background-color: #f5f7fa;
+            --text-color: #333333;
+            --border-color: #e0e0e0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--background-color);
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            background-color: var(--secondary-color);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+        }
+
+        h1, h2, h3 {
+            margin-top: 0;
+        }
+
+        .endpoint {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .method {
+            font-weight: bold;
+            color: #27ae60;
+            background-color: #e8f8f5;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            margin-right: 0.5rem;
+        }
+
+        .url {
+            font-family: monospace;
+            background-color: #f1f3f5;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 0.5rem;
+            font-size: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-family: 'Inter', sans-serif;
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        pre {
+            background-color: #f8f9fa;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 1rem;
+            overflow-x: auto;
+            font-family: monospace;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        #loading {
+            text-align: center;
+            padding: 1rem;
+            font-style: italic;
+        }
+
+        .json-key { color: #e74c3c; }
+        .json-string { color: #27ae60; }
+        .json-number { color: #f39c12; }
+        .json-boolean { color: #8e44ad; }
+        .json-null { color: #95a5a6; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Manga API Documentation</h1>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="endpoint">
+            <h2>Get Manga Information</h2>
+            <p><span class="method">GET</span> <span class="url">/manga</span></p>
+            <p>Retrieve information about a manga and its chapters.</p>
+            
+            <h3>Query Parameters</h3>
+            <table>
+                <tr>
+                    <th>Parameter</th>
+                    <th>Type</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td>name</td>
+                    <td>string</td>
+                    <td>The name of the manga (required)</td>
+                </tr>
+                <tr>
+                    <td>chapters</td>
+                    <td>string</td>
+                    <td>Chapter or range of chapters (e.g., "1-3" or "4.5") (required)</td>
+                </tr>
+                <tr>
+                    <td>source</td>
+                    <td>string</td>
+                    <td>Source of the manga (default: "weebverse")</td>
+                </tr>
+                <tr>
+                    <td>quality</td>
+                    <td>string</td>
+                    <td>Image quality (default: "high")</td>
+                </tr>
+                <tr>
+                    <td>language</td>
+                    <td>string</td>
+                    <td>Language of the manga (default: "en")</td>
+                </tr>
+            </table>
+            
+            <h3>Try it out</h3>
+            <form id="apiForm">
+                <div class="form-group">
+                    <label for="mangaName">Manga Name:</label>
+                    <input type="text" id="mangaName" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="chapters">Chapters:</label>
+                    <input type="text" id="chapters" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="source">Source:</label>
+                    <input type="text" id="source" value="weebverse">
+                </div>
+                
+                <div class="form-group">
+                    <label for="quality">Quality:</label>
+                    <input type="text" id="quality" value="high">
+                </div>
+                
+                <div class="form-group">
+                    <label for="language">Language:</label>
+                    <input type="text" id="language" value="en">
+                </div>
+                
+                <button type="submit">Send Request</button>
+            </form>
+            
+            <div id="loading" class="hidden">Loading...</div>
+            
+            <div id="responseContainer" class="hidden">
+                <h3>Response</h3>
+                <pre id="result"></pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('apiForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const mangaName = document.getElementById('mangaName').value;
+            const chapters = document.getElementById('chapters').value;
+            const source = document.getElementById('source').value;
+            const quality = document.getElementById('quality').value;
+            const language = document.getElementById('language').value;
+            
+            const url = `/manga?name=${encodeURIComponent(mangaName)}&chapters=${encodeURIComponent(chapters)}&source=${encodeURIComponent(source)}&quality=${encodeURIComponent(quality)}&language=${encodeURIComponent(language)}`;
+            
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('responseContainer').classList.add('hidden');
+            
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('result').innerHTML = syntaxHighlight(JSON.stringify(data, null, 2));
+                    document.getElementById('loading').classList.add('hidden');
+                    document.getElementById('responseContainer').classList.remove('hidden');
+                })
+                .catch(error => {
+                    document.getElementById('result').innerHTML = syntaxHighlight(JSON.stringify({ error: 'Failed to fetch manga data', message: error.message }, null, 2));
+                    document.getElementById('loading').classList.add('hidden');
+                    document.getElementById('responseContainer').classList.remove('hidden');
+                });
+        });
+
+        function syntaxHighlight(json) {
+            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                var cls = 'json-number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'json-key';
+                    } else {
+                        cls = 'json-string';
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'json-boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'json-null';
+                }
+                return '<span class="' + cls + '">' + match + '</span>';
+            });
+        }
+    </script>
+</body>
+                      </html>
