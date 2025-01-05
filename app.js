@@ -1,209 +1,48 @@
 const express = require('express');
 const axios = require('axios');
-const cheerio = require('cheerio');
 const fs = require('fs').promises;
 const path = require('path');
-const url = require('url');
+
+const { searchMangazero, fetchInfoMangazero, downloadChapterMangazero } = require('./utils/mangazero');
+const { searchWeebverse, fetchInfoWeebverse, downloadChapterWeebverse } = require('./utils/weebverse');
 
 const app = express();
 const port = process.env.PORT || 10001;
 
-// Serve static files from the downloads directory with custom headers
 app.use('/images', (req, res, next) => {
-  // Set headers to allow image viewing
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   next();
 }, express.static('downloads'));
 
-// Utility function to handle HTTP requests with retries
-async function fetchWithRetry(url, options = {}, retries = 3) {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const response = await axios(url, options);
-      return response.data;
-    } catch (error) {
-      if (i === retries - 1) throw error;
-      await new Promise(res => setTimeout(res, 1000 * Math.pow(2, i))); // Exponential backoff
-    }
-  }
-}
-
-// Get the base URL for the server
 function getBaseUrl(req) {
   return `${req.protocol}://${req.get('host')}`;
-}
-
-async function searchMangaManganelo(input, numOfSearch) {
-  const url = `https://mangakakalot.com/search/story/${encodeURIComponent(input.replace(/ /g, '_'))}`;
-  const data = await fetchWithRetry(url);
-  const $ = cheerio.load(data);
-
-  const results = [];
-  $('.story_item').each((i, el) => {
-    if (i >= numOfSearch) return false;
-    const $el = $(el);
-    const updated = $el.find('.story_item_right').text().match(/Updated : (.*)/);
-    results.push({
-      name: $el.find('.story_name a').text().trim(),
-      url: $el.find('.story_name a').attr('href'),
-      referer: $el.find('.story_name a').attr('href'),
-      latest: $el.find('.story_chapter a').attr('title'),
-      updated: updated ? updated[1] : 'Unknown',
-    });
-  });
-
-  if (results.length === 0) {
-    throw new Error('No manga found');
-  }
-
-  return results;
-}
-
-async function fetchMangaDetailsManganelo(url) {
-  const data = await fetchWithRetry(url);
-  const $ = cheerio.load(data);
-
-  const pages = [];
-  $('.chapter-list .row').each((_, el) => {
-    const chapterUrl = $(el).find('a').attr('href');
-    const chapterMatch = chapterUrl.match(/chapter-(\d+(?:\.\d+)?)/);
-    if (chapterMatch) {
-      pages.push(chapterMatch[1]);
-    }
-  });
-
-  return {
-    pages: pages.reverse(),
-  };
-}
-
-async function downloadChapterManganelo(url, referer, mangaTitle, chapterNum, baseUrl) {
-  const data = await fetchWithRetry(url, { headers: { Referer: referer } });
-  const $ = cheerio.load(data);
-
-  const images = [];
-  $('.container-chapter-reader img').each((_, el) => {
-    const src = $(el).attr('src');
-    if (src) images.push(src);
-  });
-
-  // Sanitize manga title for file system
-  const safeMangaTitle = mangaTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-  const chapterFolder = path.join('downloads', safeMangaTitle, `chapter-${chapterNum}`);
-  await fs.mkdir(chapterFolder, { recursive: true });
-
-  const downloadedImages = await Promise.all(images.map(async (imageUrl, index) => {
-    const imageResponse = await axios.get(imageUrl, {
-      responseType: 'arraybuffer',
-      headers: { Referer: referer }
-    });
-    const extension = path.extname(imageUrl) || '.jpg'; // Fallback to .jpg if no extension
-    const filename = `page-${(index + 1).toString().padStart(3, '0')}${extension}`;
-    const filePath = path.join(chapterFolder, filename);
-    await fs.writeFile(filePath, imageResponse.data);
-
-    // Generate web-accessible URL for the downloaded image
-    const relativePath = path.join(safeMangaTitle, `chapter-${chapterNum}`, filename).replace(/\\/g, '/');
-    return {
-      originalUrl: imageUrl,
-      localPath: `${baseUrl}/images/${relativePath}`
-    };
-  }));
-
-  return downloadedImages;
-}
-
-async function searchMangaManga4life(input, numOfSearch) {
-  const url = 'https://manga4life.com/search/';
-  const { data } = await axios.get(url);
-  const $ = cheerio.load(data);
-
-  const scriptContent = $('script:contains("vm.Directory")').html();
-  const mangaList = JSON.parse(scriptContent.match(/vm\.Directory = (.*);/)[1]);
-
-  const results = mangaList
-    .filter(manga => manga.s.toLowerCase().includes(input.toLowerCase()))
-    .slice(0, numOfSearch)
-    .map(manga => ({
-      name: manga.s,
-      slug: manga.i,
-      latest: manga.l,
-      status: manga.ss,
-      updated: manga.ls
-    }));
-
-  if (results.length === 0) {
-    throw new Error('No manga found');
-  }
-
-  return results;
-}
-
-async function fetchMangaDetailsManga4life(slug) {
-  const url = `https://manga4life.com/manga/${slug}`;
-  const { data } = await axios.get(url);
-  const $ = cheerio.load(data);
-
-  const scriptContent = $('script:contains("vm.Chapters")').html();
-  const chaptersData = JSON.parse(scriptContent.match(/vm\.Chapters = (.*);/)[1]);
-
-  const pages = chaptersData.map(chapter => {
-    const chapterNumber = chapter.Chapter.slice(1, -1);
-    return parseFloat(chapterNumber) || parseInt(chapterNumber);
-  }).sort((a, b) => b - a);
-
-  return {
-    pages,
-    referer: 'manga4life.com'
-  };
-}
-
-async function downloadChapterManga4life(slug, chapter) {
-  const url = `https://manga4life.com/read-online/${slug}-chapter-${chapter}-index-1.html`;
-  const { data } = await axios.get(url);
-  const $ = cheerio.load(data);
-
-  const scriptContent = $('script:contains("vm.CurChapter")').html();
-  const chapterData = JSON.parse(scriptContent.match(/vm\.CurChapter = (.*);/)[1]);
-
-  const directory = chapterData.Directory !== '' ? `/${chapterData.Directory}` : '';
-  const chNumber = chapterData.Chapter.slice(1, -1).padStart(4, '0');
-  const totalPages = parseInt(chapterData.Page);
-
-  const images = [];
-  for (let i = 1; i <= totalPages; i++) {
-    const pageNumber = i.toString().padStart(3, '0');
-    images.push(`https://hot.planeptune.us/manga/${slug}${directory}/${chNumber}-${pageNumber}.png`);
-  }
-
-  return images;
 }
 
 async function getMangaInfo(name, source = 'mangadex', language = 'en') {
   switch (source) {
     case 'mangadex': {
-      const searchResponse = await fetchWithRetry('https://api.mangadex.org/manga', {
+      const searchResponse = await axios.get('https://api.mangadex.org/manga', {
         params: {
           title: name,
-          limit: 1,
+          limit: 5,
           order: { relevance: 'desc' },
         },
       });
 
-      if (searchResponse.data.length === 0) {
+      if (searchResponse.data.data.length === 0) {
         throw new Error('Manga not found');
       }
 
       return {
-        mangaId: searchResponse.data[0].id,
-        mangaTitle: searchResponse.data[0].attributes.title.en || name,
+        mangaId: searchResponse.data.data[0].id,
+        mangaTitle: searchResponse.data.data[0].attributes.title.en || name,
         language,
       };
     }
     case 'mangazero': {
-      const searchResult = await searchMangaManganelo(name, 1);
-      const mangaDetails = await fetchMangaDetailsManganelo(searchResult[0].url);
+      const searchResult = await searchMangazero(name, 1);
+      const mangaDetails = await fetchInfoMangazero(searchResult[0].url);
       return {
         mangaUrl: searchResult[0].url,
         mangaTitle: searchResult[0].name,
@@ -211,9 +50,9 @@ async function getMangaInfo(name, source = 'mangadex', language = 'en') {
         referer: searchResult[0].referer,
       };
     }
-    case 'manga4life': {
-      const searchResult = await searchMangaManga4life(name, 1);
-      const mangaDetails = await fetchMangaDetailsManga4life(searchResult[0].slug);
+    case 'weebverse': {
+      const searchResult = await searchWeebverse(name, 1);
+      const mangaDetails = await fetchInfoWeebverse(searchResult[0].slug);
       return {
         mangaSlug: searchResult[0].slug,
         mangaTitle: searchResult[0].name,
@@ -229,17 +68,17 @@ async function getMangaInfo(name, source = 'mangadex', language = 'en') {
 async function getChapterImages(chapterInfo, source, referer, mangaTitle, chapterNum, baseUrl) {
   switch (source) {
     case 'mangadex': {
-      const data = await fetchWithRetry(`https://api.mangadex.org/at-home/server/${chapterInfo.id}`);
-      const baseUrl = data.baseUrl;
-      const chapterHash = data.chapter.hash;
-      return data.chapter.data.map(page => `${baseUrl}/data/${chapterHash}/${page}`);
+      const data = await axios.get(`https://api.mangadex.org/at-home/server/${chapterInfo.id}`);
+      const baseUrl = data.data.baseUrl;
+      const chapterHash = data.data.chapter.hash;
+      return data.data.chapter.data.map(page => `${baseUrl}/data/${chapterHash}/${page}`);
     }
     case 'mangazero': {
-      const images = await downloadChapterManganelo(chapterInfo.url, referer, mangaTitle, chapterNum, baseUrl);
+      const images = await downloadChapterMangazero(chapterInfo.url, referer, mangaTitle, chapterNum, baseUrl);
       return images.map(img => img.localPath);
     }
-    case 'manga4life': {
-      return await downloadChapterManga4life(chapterInfo.mangaSlug, chapterNum);
+    case 'weebverse': {
+      return await downloadChapterWeebverse(chapterInfo.mangaSlug, chapterNum);
     }
     default:
       throw new Error('Unsupported source');
@@ -276,6 +115,7 @@ app.get('/manga', async (req, res) => {
     const mangaData = {
       manga: mangaInfo.mangaTitle,
       source,
+      quality,
       chapters: [],
     };
 
@@ -283,25 +123,25 @@ app.get('/manga', async (req, res) => {
       let chapterInfo;
 
       if (source === 'mangadex') {
-        const chapterResponse = await fetchWithRetry('https://api.mangadex.org/chapter', {
+        const chapterResponse = await axios.get('https://api.mangadex.org/chapter', {
           params: {
             manga: mangaInfo.mangaId,
             chapter: chapterNum.toString(),
             translatedLanguage: [language],
-            limit: 1,
+            limit: 5,
           },
         });
 
-        if (chapterResponse.data.length === 0) {
+        if (chapterResponse.data.data.length === 0) {
           console.warn(`Chapter ${chapterNum} not found for ${mangaInfo.mangaTitle}`);
           continue;
         }
-        chapterInfo = { id: chapterResponse.data[0].id };
+        chapterInfo = { id: chapterResponse.data.data[0].id };
       } else if (source === 'mangazero') {
         chapterInfo = {
           url: `${mangaInfo.mangaUrl}/chapter-${chapterNum}`,
         };
-      } else if (source === 'manga4life') {
+      } else if (source === 'weebverse') {
         chapterInfo = {
           mangaSlug: mangaInfo.mangaSlug,
         };
@@ -323,16 +163,13 @@ app.get('/manga', async (req, res) => {
   }
 });
 
-// Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
   res.status(500).json({ error: 'Internal server error', message: err.message });
 });
 
-// Create downloads directory if it doesn't exist
 fs.mkdir('downloads', { recursive: true }).catch(console.error);
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
-  console.log(`Access downloaded manga at http://localhost:${port}/images/`);
 });
