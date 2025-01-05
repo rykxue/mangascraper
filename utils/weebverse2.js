@@ -55,7 +55,7 @@ async function downloadChapterWeebverse2(slug, chapter) {
   const chapterData = JSON.parse(scriptContent.match(/vm\.CurChapter = (.*);/)[1]);
 
   const directory = chapterData.Directory !== '' ? `/${chapterData.Directory}` : '';
-  const chNumber = chapterData.Chapter.padStart(4, '0');
+  const chNumber = chapterData.Chapter.slice(1, -1).padStart(4, '0');
   const totalPages = parseInt(chapterData.Page);
 
   const images = [];
