@@ -21,7 +21,7 @@ async function searchWeebverse2(input, numOfSearch) {
   const results = mangaList
     .map(manga => {
       const normalizedName = normalizeString(manga.s);
-      const score = levenshtein(normalizedInput, normalizedName);
+      const score = levenshtein.get(normalizedInput, normalizedName);
       return { ...manga, score };
     })
     .sort((a, b) => a.score - b.score) // Sort by closest match
