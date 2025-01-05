@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weebverse API Documentation</title>
+    <title>Weebverse API</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -98,6 +98,7 @@
             border: 1px solid var(--border-color);
             border-radius: 4px;
             font-family: 'Inter', sans-serif;
+            outline: none;
         }
 
         button {
@@ -207,15 +208,6 @@
                     <input type="text" id="source" value="weebverse">
                 </div>
                 
-                <div class="form-group">
-                    <label for="quality">Quality:</label>
-                    <input type="text" id="quality" value="high">
-                </div>
-                
-                <div class="form-group">
-                    <label for="language">Language:</label>
-                    <input type="text" id="language" value="en">
-                </div>
                 
                 <button type="submit">GET</button>
             </form>
@@ -229,53 +221,60 @@
         </div>
     </div>
 
-    <script>
-        document.getElementById('apiForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const mangaName = document.getElementById('mangaName').value;
-            const chapters = document.getElementById('chapters').value;
-            const source = document.getElementById('source').value;
-            const quality = document.getElementById('quality').value;
-            const language = document.getElementById('language').value;
-            
-            const url = `/manga?name=${encodeURIComponent(mangaName)}&chapters=${encodeURIComponent(chapters)}&source=${encodeURIComponent(source)}&quality=${encodeURIComponent(quality)}&language=${encodeURIComponent(language)}`;
-            
-            document.getElementById('loading').classList.remove('hidden');
-            document.getElementById('responseContainer').classList.add('hidden');
-            
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('result').innerHTML = syntaxHighlight(JSON.stringify(data, null, 2));
-                    document.getElementById('loading').classList.add('hidden');
-                    document.getElementById('responseContainer').classList.remove('hidden');
-                })
-                .catch(error => {
-                    document.getElementById('result').innerHTML = syntaxHighlight(JSON.stringify({ error: 'Failed to fetch manga data', message: error.message }, null, 2));
-                    document.getElementById('loading').classList.add('hidden');
-                    document.getElementById('responseContainer').classList.remove('hidden');
-                });
-        });
-
-        function syntaxHighlight(json) {
-            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
-                var cls = 'json-number';
-                if (/^"/.test(match)) {
-                    if (/:$/.test(match)) {
-                        cls = 'json-key';
-                    } else {
-                        cls = 'json-string';
-                    }
-                } else if (/true|false/.test(match)) {
-                    cls = 'json-boolean';
-                } else if (/null/.test(match)) {
-                    cls = 'json-null';
-                }
-                return '<span class="' + cls + '">' + match + '</span>';
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+<script>
+    document.getElementById('apiForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const mangaName = document.getElementById('mangaName').value;
+        const chapters = document.getElementById('chapters').value;
+        const source = document.getElementById('source').value;
+        
+        const url = `/manga`;
+        const params = {
+            name: mangaName,
+            chapters: chapters,
+            source: source
+        };
+        
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('responseContainer').classList.add('hidden');
+        
+        axios.get(url, { params })
+            .then(response => {
+                document.getElementById('result').innerHTML = syntaxHighlight(JSON.stringify(response.data, null, 2));
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('responseContainer').classList.remove('hidden');
+            })
+            .catch(error => {
+                const errorMessage = error.response
+                    ? error.response.data
+                    : { error: 'Failed to fetch manga data', message: error.message };
+                
+                document.getElementById('result').innerHTML = syntaxHighlight(JSON.stringify(errorMessage, null, 2));
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('responseContainer').classList.remove('hidden');
             });
-        }
-    </script>
+    });
+
+    function syntaxHighlight(json) {
+        json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+            var cls = 'json-number';
+            if (/^"/.test(match)) {
+                if (/:$/.test(match)) {
+                    cls = 'json-key';
+                } else {
+                    cls = 'json-string';
+                }
+            } else if (/true|false/.test(match)) {
+                cls = 'json-boolean';
+            } else if (/null/.test(match)) {
+                cls = 'json-null';
+            }
+            return '<span class="' + cls + '">' + match + '</span>';
+        });
+    }
+</script>
 </body>
-                      </html>
+</html>
