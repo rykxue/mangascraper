@@ -378,73 +378,7 @@ app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
 
-module.exports = app;
-
-[V0_FILE]typescript:file="weebverse-api.ts"
-import express from 'express';
-import axios from 'axios';
-import cheerio from 'cheerio';
-import fs from 'fs/promises';
-import path from 'path';
-import rateLimit from 'express-rate-limit';
-import compression from 'compression';
-import levenshtein from 'fast-levenshtein';
-
-const app = express();
-const port = process.env.PORT || 10001;
-
-// Enable gzip compression
-app.use(compression());
-
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
-});
-app.use(limiter);
-
-// Serve static files from the downloads directory with custom headers
-app.use('/images', (req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  next();
-}, express.static('downloads'));
-
-// Utility function to handle HTTP requests with retries
-async function fetchWithRetry(url: string, options: any = {}, retries: number = 3): Promise<any> {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const response = await axios(url, options);
-      return response.data;
-    } catch (error) {
-      if (i === retries - 1) throw error;
-      await new Promise(res => setTimeout(res, 1000 * Math.pow(2, i))); // Exponential backoff
-    }
-  }
-}
-
-// Get the base URL for the server
-function getBaseUrl(req: express.Request): string {
-  return `${req.protocol}://${req.get('host')}`;
-}
-
-async function searchWeebverseThree(input: string, numOfSearch: number): Promise<any[]> {
-  const url = `https://mangakakalot.com/search/story/${encodeURIComponent(input.replace(/ /g, '_'))}`;
-  const data = await fetchWithRetry(url);
-  const $ = cheerio.load(data);
-
-  const results: any[] = [];
-  $('.story_item').each((i, el) => {
-    if (i >= numOfSearch) return false;
-    const $el = $(el);
-    const updated = $el.find('.story_item_right').text().match(/Updated : (.*)/);
-    results.push({
-      name: $el.find('.story_name a').text().trim(),
-      url: $el.find('.story_name a').attr('href'),
-      referer: $el.find('.story_name a').attr('href'),
-      latest: $el.find('.story_chapter a').attr('title'),
-      updated: updated ? updated[1] : 'Unknown',
-    });
+module.exports = app    });
   });
 
   if (results.length === 0) {
