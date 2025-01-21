@@ -448,7 +448,7 @@ function findClosestMatch(input, titles, source) {
   let minDistance = Number.POSITIVE_INFINITY;
 
   for (const title of titles) {
-    const distance = levenshtein.get(input, title);
+    const distance = levenshtein.get(input.toLowerCase(), title);
     if (distance < minDistance) {
       minDistance = distance;
       closestMatch = title;
