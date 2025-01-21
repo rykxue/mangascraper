@@ -49,20 +49,47 @@ function getBaseUrl(req) {
   return `${req.protocol}://${req.get("host")}`
 }
 
-async function searchMangaReader(input, numOfSearch) {
-  const url = `https://mangareader.to/search?keyword=${encodeURIComponent(input)}`
+// Utility function to clean strings
+function cleanString(str) {
+  return str.trim().replace(/\s+/g, " ")
+}
+
+// SearchScraper equivalent
+async function searchMangaReader(query, numOfSearch = 10) {
+  const url = `https://mangareader.to/search?keyword=${encodeURIComponent(query)}`
   const { data } = await axios.get(url)
   const $ = cheerio.load(data)
 
   const results = []
-  $(".manga-item").each((i, el) => {
+  $(".manga_list-sbs .mls-wrap .item").each((i, el) => {
     if (i >= numOfSearch) return false
     const $el = $(el)
     results.push({
-      name: $el.find(".manga-name").text().trim(),
-      url: "https://mangareader.to" + $el.find("a").attr("href"),
-      latest: $el.find(".fd-infor .fdi-item").first().text().trim(),
-      updated: $el.find(".fd-infor .fdi-item").last().text().trim(),
+      title: $el.find("h3.manga-name").text().trim(),
+      slug: $el.find("h3.manga-name a").attr("href").slice(1),
+      genres: $el
+        .find(".fdi-cate a")
+        .map((_, genre) => $(genre).text().trim().toLowerCase())
+        .get(),
+      langs: $el.find(".tick-lang").text().trim().toLowerCase().split("/"),
+      cover: $el.find("img.manga-poster-img").attr("src"),
+      chapters: cleanString(
+        $el
+          .find("a")
+          .filter((_, a) => $(a).text().includes("Chap "))
+          .first()
+          .text()
+          .split(" ")[1],
+      ),
+      volumes:
+        cleanString(
+          $el
+            .find("a")
+            .filter((_, a) => $(a).text().includes("Vol "))
+            .first()
+            .text()
+            .split(" ")[1],
+        ) || "0",
     })
   })
 
@@ -73,9 +100,35 @@ async function searchMangaReader(input, numOfSearch) {
   return results
 }
 
-async function fetchMangaReaderDetails(url) {
+// MangaScraper equivalent
+async function fetchMangaReaderDetails(slug) {
+  const url = `https://mangareader.to/${slug}`
   const { data } = await axios.get(url)
   const $ = cheerio.load(data)
+
+  const getTextAfter = (selector, text) => {
+    return $(selector)
+      .filter((_, el) => $(el).text().includes(text))
+      .first()
+      .text()
+      .split(":")[1]
+      .trim()
+  }
+
+  const mangaDetails = {
+    title: $("h2.manga-name").text().trim(),
+    slug: slug,
+    alt_title: $("div.manga-name-or").text().trim(),
+    genres: $(".genres a")
+      .map((_, el) => $(el).text().trim().toLowerCase())
+      .get(),
+    type: getTextAfter("div.item.item-title", "Type:").toLowerCase(),
+    rating: getTextAfter("div.item.item-title", "Score:").toLowerCase(),
+    authors: getTextAfter("div.item.item-title", "Authors:").split("(")[0].trim(),
+    published_date: cleanString(getTextAfter("div.item.item-title", "Published:").split("to")[0]),
+    cover: $(".manga-poster-img").attr("src"),
+    synopsis: $(".description").text().trim(),
+  }
 
   const chapters = []
   $(".chapter-list .chapter-item").each((_, el) => {
@@ -88,6 +141,7 @@ async function fetchMangaReaderDetails(url) {
   })
 
   return {
+    ...mangaDetails,
     chapters: chapters.reverse(),
     referer: "https://mangareader.to",
   }
@@ -325,12 +379,10 @@ async function getWeebverseInfo(title, source, language = "en") {
     case "1":
     default: {
       const searchResult = await searchMangaReader(title, 1)
-      const mangaDetails = await fetchMangaReaderDetails(searchResult[0].url)
+      const mangaDetails = await fetchMangaReaderDetails(searchResult[0].slug)
       return {
-        mangaUrl: searchResult[0].url,
-        mangaTitle: searchResult[0].name,
-        chapters: mangaDetails.chapters,
-        referer: mangaDetails.referer,
+        ...mangaDetails,
+        mangaUrl: `https://mangareader.to/${mangaDetails.slug}`,
       }
     }
   }
@@ -352,7 +404,12 @@ async function getWeebverseChapterImages(chapterInfo, source, referer, mangaTitl
     }
     case "1":
     default: {
-      return await downloadMangaReaderChapter(chapterInfo.url, mangaTitle, chapterNum, baseUrl)
+      return await downloadMangaReaderChapter(
+        `https://mangareader.to/${chapterInfo.slug}/chapter-${chapterNum}`,
+        mangaTitle,
+        chapterNum,
+        baseUrl,
+      )
     }
   }
 }
@@ -448,7 +505,7 @@ app.get("/manga", async (req, res) => {
         }
       } else {
         chapterInfo = {
-          url: `${mangaInfo.mangaUrl}/chapter-${chapterNum}`,
+          slug: mangaInfo.slug,
         }
       }
 
