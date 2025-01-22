@@ -341,7 +341,7 @@ async function getWeebverseInfo(title, source, language = "en") {
       const searchResponse = await fetchWithRetry("https://api.mangadex.org/manga", {
         params: {
           title: title,
-          limit: 3,
+          limit: 1,
           order: { relevance: "desc" },
         },
       })
@@ -439,23 +439,26 @@ function parseChapterRange(range, availableChapters) {
   return availableChapters.filter((chapter) => chapter >= start && chapter <= end)
 }
 
-function findClosestMatch(input, titles, source) {
-  if (source === '1') {
-    return null;
+function findClosestMatch(input, titles) {
+  if (!titles || titles.length === 0 || !input) {
+    return input // Return the input if titles is empty or undefined, or if input is falsy
   }
 
-  let closestMatch = titles[0];
-  let minDistance = Number.POSITIVE_INFINITY;
+  let closestMatch = titles[0]
+  let minDistance = Number.POSITIVE_INFINITY
 
   for (const title of titles) {
-    const distance = levenshtein.get(input.toLowerCase(), title);
-    if (distance < minDistance) {
-      minDistance = distance;
-      closestMatch = title;
+    if (title) {
+      // Check if the title is not null or undefined
+      const distance = levenshtein.get(input.toLowerCase(), title.toLowerCase())
+      if (distance < minDistance) {
+        minDistance = distance
+        closestMatch = title
+      }
     }
   }
 
-  return closestMatch;
+  return closestMatch || input // Return input if no valid match found
 }
 
 app.get("/manga", async (req, res) => {
@@ -477,6 +480,7 @@ app.get("/manga", async (req, res) => {
 
     const mangaData = {
       manga: closestTitle,
+      source,
       chapters: [],
     }
 
@@ -489,7 +493,7 @@ app.get("/manga", async (req, res) => {
             manga: mangaInfo.mangaId,
             chapter: chapterNum.toString(),
             translatedLanguage: [mangaInfo.language],
-            limit: 3,
+            limit: 1,
           },
         })
 
@@ -547,3 +551,4 @@ fs.mkdir(path.join(__dirname, "downloads"), { recursive: true }).catch(console.e
 app.listen(port, () => {
   console.log(`Server running on port ${port}`)
 })
+
