@@ -326,7 +326,8 @@ app.get('/manga', async (req, res) => {
     const closestTitle = findClosestMatch(title, [mangaInfo.mangaTitle]);
     
     const availableChapters = source === '2' ? [] : mangaInfo.chapters.map(Number);
-    const chapterList = parseChapterRange(chapter, availableChapters);
+    const chapterList = parseChapterRange(chapter, availableChapters).sort((a, b) => a - b);
+
 
     const mangaData = {
       manga: closestTitle,
