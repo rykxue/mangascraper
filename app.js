@@ -311,7 +311,7 @@ function findClosestMatch(input, titles) {
   return closestMatch;
 }
 
-app.get('/manga', async (req, res) => {
+app.get('/v0/manga', async (req, res) => {
   const { title, chapter, source = '1' } = req.query;
 
   if (!title || !chapter) {
