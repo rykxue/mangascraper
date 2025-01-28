@@ -367,7 +367,7 @@ app.get('/manga', async (req, res) => {
 
       mangaData.chapters.push({
         chapter: chapterNum,
-        images: images,
+        pages: images,
       });
     }
 
